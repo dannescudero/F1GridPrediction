@@ -14,6 +14,8 @@ Project used for double-degree-link program between:
 Professor Abdellah Salhi (University of Essex) and Dr. Alfredo Garbuno Iñigo (ITAM).
 
 ## Data
-The data for this project comes from the R package, <a href="https://github.com/cran/f1dataR">f1dataR</a> created by Casanova. This R package gathers the data from the \texttt{Ergast Developer API} \citep{Ergast}, an experimental web service which provides a historical record of motor racing data, and the official Formula 1 data stream via the \texttt{fastf1} Python library.
+The data for this project comes from the R package, <a href="https://github.com/cran/f1dataR">f1dataR</a> created by <a href="https://github.com/SCasanova">Casanova</a> and <a href="https://github.com/pbulsink">Bulsink</a>. This R package gathers the data from the <a href="http://ergast.com/mrd/">Ergast Developer API</a>, an experimental web service which provides a historical record of motor racing data, and the official Formula 1 data stream via the <a href="https://pypi.org/project/fastf1/">fastf1</a> Python library.
 
 Abstract:
+
+
