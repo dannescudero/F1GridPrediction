@@ -1,0 +1,692 @@
+---
+title: "Dissertation"
+author: "Daniela Escudero Ambrosi"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r, eval=TRUE}
+
+```
+
+## Libraries
+```{r, eval=TRUE}
+
+# Install packages
+#install.packages("f1dataR") #Formula 1
+
+# Libraries
+library(reticulate)
+library(f1dataR)
+library(dplyr)
+library(flexmix)
+
+```
+
+## F1PI
+```{r, eval=TRUE}
+
+########################
+### F1 Power Index
+########################
+
+y = 2023 #year
+n = nrow(load_schedule(y)) #session number
+
+driv_const <- as.data.frame(load_standings(y, n))[, -c(2,3,4)] #DF of drivers and constructors
+finished <- c("Finished", "+1 Lap", "+2 Laps") #Finished status
+last_results <- load_standings(y-1) #Last year results
+last_results[,2:4] <- lapply(last_results[, 2:4], as.numeric) #Turning values to numeric
+points <- sort(dgamma(seq(0.5,3, length.out = 20), shape = 1, rate = 1), decreasing = T) * 40 #PI points
+
+# Points plot
+plot(seq(1, 20, by = 1), points, type = "b", xlab = "Driver position", ylab = "Points", col = "orangered3", lwd = 3, ylim = c(-1, 26), xaxt = "n")
+points(seq(1, 20, by = 2), c(25, 18, 15, 12, 10, 8, 6, 4, 2, 1), type = "b", lwd = 3, col = "springgreen3")
+legend("topright", legend = c("FIA points", "Computed points"), lwd = 3, col = c("springgreen3", "orangered3"), bty="n",cex = 0.8)
+axis(3, seq(1, 20, by = 2), lwd = 3, col = "springgreen3", labels = 1:10)
+axis(1, 1:20, lwd = 3, col = "orangered3")
+mtext(c("Comparison between FIA awarded points and new computed Points"), side = 3, line = -1, outer = TRUE, font = 2, cex = 1.3)
+
+# Results
+assign(paste("Results_DF", y, sep = "_"), data.frame())
+Results_DF <- get(paste("Results_DF", y, sep = "_"))
+for(k in 1:n){ #Sessions
+  Results <- as.data.frame(load_results(y, k))[,-c(3,6,8:12)]
+  Results$points <- points
+  Results$round <- rep(k,20)
+  Results_DF <- bind_rows(Results_DF, Results)
+}
+assign(paste("Results_DF", y, sep = "_"), Results_DF)
+
+# New points
+drivers_const_DF <- data.frame()
+for (i in 1:n){
+  round <- i
+  for (j in 1:20){
+    driver <- Results_DF[j+(20*(round-1)), 1]
+    constructor <- driv_const[driv_const$driver_id == driver, 2] #corresponding constructor
+    round_points <- Results_DF[Results_DF$round == round & Results_DF$driver_id == driver,]$points
+    accumulated_points <- sum(Results_DF[Results_DF$round %in% 1:round & 
+                      Results_DF$driver_id == driver,]$points)
+    x <- data.frame(driver, constructor, round_points, accumulated_points, round)
+    drivers_const_DF <- bind_rows(drivers_const_DF, x)
+  }
+}
+
+# Results from the parameter tuning
+a = 1 #gamma
+b = 0.02 #zeta
+c = 0.58 #eta
+d = 0.98 #theta
+e = 0.9 #nu
+
+# F1 Power Index for the race
+F1PI_DF <- data.frame()
+for (i in 1:n){
+  round <- i
+  for (j in 1:20){
+    driver <- Results_DF[j+(20*(round-1)), 1]
+    constructor <- driv_const[driv_const$driver_id == driver, 2] #corresponding constructor
+    status <- Results_DF[j+(20*(round-1)), 5]
+    driv_accum <- drivers_const_DF[drivers_const_DF$round == round & 
+                                     drivers_const_DF$driver == driver,]$accumulated_points
+    const_accum <- sum(drivers_const_DF[drivers_const_DF$round == round & 
+                                     drivers_const_DF$constructor == constructor,]$accumulated_points)
+    avail_accum <- sum(drivers_const_DF[drivers_const_DF$round == round,]$accumulated_points)
+    
+    # Power Index
+    PI <- ((driv_accum * a + const_accum * (1-a)) / (avail_accum * a + avail_accum * (1-a) * 2)) * 100
+    
+    # Adjusting for round 1
+    if(round == 1){
+      if(status %in% finished){
+        PI_adj <- PI * b + 
+          (sum(last_results[last_results$constructor_id == constructor,]$points)/sum(last_results$points)) * 100 * (1-b)
+      } else{
+        PI_adj <- PI * c + 
+          (sum(last_results[last_results$constructor_id == constructor,]$points)/sum(last_results$points)) * 100 * (1-c)
+      }
+    } else if(status %in% finished){ # Averaging for last race
+         PI_adj <- PI * d + tail(F1PI_DF[F1PI_DF$driver == driver,]$PI_adj, n = 1) * (1-d)
+       } else{ # Adjusting for incidents
+      PI_adj <-  PI * e + tail(F1PI_DF[F1PI_DF$driver == driver,]$PI_adj, n = 1) * (1-e)
+    }
+    
+    PI_x <- data.frame(driver, constructor, status, PI, PI_adj, round)
+    F1PI_DF <- bind_rows(F1PI_DF, PI_x)
+  }
+}
+
+# Master DATASET
+View(cbind.data.frame(Results_DF[,c(1,2,7,4,3,5)], as.numeric(Results_DF[,4]) - as.numeric(Results_DF[,3]), drivers_const_DF[,c(3,4)], F1PI_DF[,c(4,5)]))
+
+```
+
+## Method -- FUNCTION
+```{r, eval=TRUE}
+
+places_difference <- function(driver, round){ ### Round MUST be >= 2
+  grid <- as.integer(Results_DF[Results_DF$driver_id == driver & Results_DF$round == round,]$grid) #In the future, to make predictions, this argument MUST be given in the function
+  constructor <- driv_const[driv_const$driver_id == driver, 2] #corresponding constructor
+  team_mate <- driv_const[driv_const$constructor_id == constructor & 
+                            !(driv_const$driver_id %in% c(driver, "de_vries", "hulkenberg")), 1]
+  last_PI <- ifelse(is.nan(tail(F1PI_DF[F1PI_DF$driver == driver &
+                                            F1PI_DF$round %in% 1:(round-1),]$PI_adj, n = 1)), 0, 
+                      tail(F1PI_DF[F1PI_DF$driver == driver & F1PI_DF$round %in% 1:(round-1),]$PI_adj, n = 1))
+  accumulated_points_d <- sum(drivers_const_DF[drivers_const_DF$driver == driver &
+                                             drivers_const_DF$round %in% 1:(round-1),]$round_points)
+  accumulated_points_c <- sum(drivers_const_DF[drivers_const_DF$constructor == constructor 
+                                             & drivers_const_DF$round %in% 1:(round-1),]$round_points)
+  status <- Results_DF[Results_DF$driver_id == driver & Results_DF$round == round,]$status
+  actual_place <- ifelse(Results_DF[Results_DF$driver_id == driver & Results_DF$round == round,]$status %in% finished,
+                         Results_DF[Results_DF$driver_id == driver & Results_DF$round == round, 3], "DNF")
+  avg_tm_points <- ifelse(is.nan(mean(drivers_const_DF[drivers_const_DF$driver == team_mate & drivers_const_DF$round %in% 1:(round-1),]$round_points)), mean(drivers_const_DF[drivers_const_DF$constructor == constructor & drivers_const_DF$round %in% 1:(round-1),]$round_points) , mean(drivers_const_DF[drivers_const_DF$driver == team_mate & drivers_const_DF$round %in% 1:(round-1),]$round_points))
+  #average teammate's points, CETERIS PARIBUS we're assuming they will score the same in average. If there's a NaN, we'll consider the team avg points
+  
+  # Minimizing the change in PI
+  x <- c()
+  for(i in 1:20){
+    projected_points <- points[i]
+    projected_PI_single <- (((accumulated_points_d + projected_points) * a +
+      (accumulated_points_c + projected_points + avg_tm_points) * (1-a)) /
+        ((sum(points) * round * a) + (sum(points)* 2 * round * (1-a)))) * 100
+    projected_PI <- projected_PI_single * d + last_PI * (1-d)
+    diference <- abs(last_PI - projected_PI)
+    x <- rbind(x, diference)
+  }
+  
+  mean_grid <- ifelse(driver == "vettel" & round == 3, 0,
+                      median(as.integer(Results_DF[Results_DF$driver_id == driver &
+                                                   Results_DF$round %in% 1:(round-1),]$grid)))
+  sd_grid <- ifelse(round == 2 | is.na(sd((as.integer(Results_DF[Results_DF$driver_id == driver &
+                                                               Results_DF$round %in% 1:(round-1),]$grid)))), 0,
+                    sd((as.integer(Results_DF[Results_DF$driver_id == driver &
+                                                               Results_DF$round %in% 1:(round-1),]$grid))))
+  if(abs(grid - mean_grid) <= sd_grid){
+    places <- as.numeric(Results_DF[Results_DF$driver_id == driver & Results_DF$round %in% 1:(round-1), 4]) -
+      as.numeric(Results_DF[Results_DF$driver_id == driver & Results_DF$round %in% 1:(round-1), 3])
+    lambda_p <- ifelse(length(places[places >= 0]) == 0, 100, sum(places[places >= 0]) / length(places[places >= 0]))
+    lambda_n <- ifelse(length(places[places < 0]) == 0, -100, sum(places[places < 0]) / length(places[places < 0]))
+    
+    z <- c()
+    if (lambda_p != 100){
+      z[1:grid] <- 1-dpois(c((grid - 1):0), lambda_p)
+    } else {
+      z[1:grid] <- 1
+    }
+    
+    if (lambda_n != -100 & grid < 20){
+      z[(grid+1):20] <- 1-dpois(c(1:(20-grid)), abs(lambda_n))
+    } else if (grid < 20){
+      z[(grid+1):20] <- 1
+    }
+    
+    predicted <- which.min(x*z)
+    } else{
+      predicted <- which.min(x)}
+  
+  prediction <- paste("Starting place: ", grid, ", Projected final place: ", predicted,
+                       ", Actual place: ", actual_place, sep = "")
+
+  #return(prediction)
+  return(predicted)
+}
+
+
+# Test
+driver = "hamilton"
+round = 10
+
+places_difference(driver, round)
+
+```
+
+## Predict for the whole grid
+```{r, eval=TRUE}
+
+predictions_grid <- data.frame()
+
+round = 10
+for(i in 1:20){
+    predictions_grid[i,1] <- driv_const[i,1]
+    predictions_grid[i,2] <- as.numeric(Results_DF[Results_DF$driver_id == driv_const[i,1] & Results_DF$round == round, ]$position)
+    predictions_grid[i,3] <- places_difference(driv_const[i,1], round)
+}
+
+colnames(predictions_grid) <- c("Driver", "Actual Result", "Predicted")
+
+predictions_grid
+
+```
+
+## Predict 1-1
+```{r, eval=TRUE}
+
+predict_grid <- function(round){
+  stand <- load_standings(y, round-1) ###YEAR SOULD BE A PARAMETER IN THE FUTURE
+  drivers <- Results_DF[Results_DF$round == round,]$driver_id
+  
+  predictions_1 <- data.frame(drivers)
+  for(i in 1:20){
+    predictions_1[i,2] <- places_difference(drivers[i], round)
+  }
+  
+  predictions <- data.frame(1:20)
+  for (i in 1:20) {
+    #Function 1
+    if (table(predictions_1[predictions_1$V2 == min(predictions_1[,2]),2]) > 1){
+      predictions[i,2] <- stand[stand$driver_id %in% predictions_1[predictions_1$V2 == min(predictions_1[,2]), 1],][1]
+      predictions_1[predictions_1$drivers == predictions[i,2], 2] <- 30
+    }
+    
+    else{
+      predictions[i,2] <- predictions_1[predictions_1$V2 == min(predictions_1[,2]), 1]
+      predictions_1[predictions_1$drivers == predictions[i,2], 2] <- 30
+    }
+    
+  }
+    colnames(predictions) <- c("predicted_position", "function_1")
+  
+  
+  #Error
+  xx <- data.frame()
+  for (i in 1:20){
+    driver_x <- Results_DF[Results_DF$round == round,]$driver_id[i]
+    status <- Results_DF[Results_DF$round == round,]$status[i]
+    diference_1 <- abs(predictions[predictions$function_1 == driver_x, 1] - i)
+    diference_2 <- abs(predictions[predictions$function_2 == driver_x, 1] - i)
+    if(!(status %in% finished) || driver_x == "de_vries"){
+      xx[i,1] <- 0
+    }
+    else if (diference_1 == 1){
+      xx[i,1] <- 0.5
+    }
+    else if (diference_1 >= 1){
+      xx[i,1] <- 1
+    }
+    else{
+      xx[i,1] <- 0
+    }
+  }
+  
+  error_f1 <- sum(xx[,1])
+  
+  predictions <- cbind(predictions, Results_DF[Results_DF$round == round,]$driver_id)
+  colnames(predictions) <- c("predicted_position", "function_1", "real_position")
+  predictions[21,] <- c(0, error_f1,0)
+  
+  return(predictions)
+}
+
+
+predict_grid(10)
+
+
+```
+
+
+
+## MSE (without accidents)
+```{r, eval=TRUE}
+
+# MSE
+xx <- c() #new vector
+for (i in 21:nrow(Results_DF)){
+  driver_x <- Results_DF[i,]$driver_id #driver
+  round_x <- Results_DF[i,]$round #round
+  position <- as.integer(Results_DF[i,]$position) #real position
+  status <- Results_DF[i, 5] #status
+  
+  if(driver_x == "de_vries" | !(status %in% finished)){ #if not in status
+    xx[i-20] <- 0
+  } else{
+    xx[i-20] <- (places_difference(driver_x, round_x) - position)^2 #squarred difference
+    }
+  }
+mse <- sum(xx)/length(xx) #MSE
+
+cat("The MSE is", mse)  #Printing the result
+
+# 7.75
+
+```
+
+## MSE per race (without accidents)
+```{r, eval=TRUE}
+
+# MSE per race
+
+mse_race <- c()
+for (i in 1:21){
+  xx <- c() #new vector
+  for (j in ((i*20)+1):((i*20)+20)){
+    driver_x <- Results_DF[j,]$driver_id #driver
+    round_x <- Results_DF[j,]$round #round
+    position <- as.integer(Results_DF[j,]$position) #real position
+    status <- Results_DF[j, 5] #status
+    
+    if(driver_x == "de_vries" | !(status %in% finished)){ #if not in status
+      xx[j-(i*20)] <- -100
+    } else{
+      xx[j-(i*20)] <- (places_difference(driver_x, round_x) - position)^2 #squared difference
+      }
+    }
+  mse_race <- cbind(mse_race, sum(xx[xx != -100])/length(xx[xx != -100])) #MSE
+}
+
+
+## Plot
+
+# Add the regression line
+sqrt_mse_race <- as.numeric(sqrt(mse_race))
+race_numbers <- as.numeric(c(1:21))
+regression <- lm(sqrt_mse_race ~ race_numbers)
+
+plot(race_numbers, sqrt_mse_race, type ="o", lwd = 3, xaxt = "n", xlab = "Race number", ylab = "RMSE", main = c("RMSE per race: average difference between ", " the prediction and result per driver"), col = "springgreen3")
+axis(1, at = 1:21, labels = c(2:22))
+abline(regression, col = "orangered3", lwd = 3)
+legend("topright", legend = c("RMSE","Trend"), lwd = 3, col = c("springgreen3","orangered3"),bty="n",cex=0.8)
+
+```
+
+
+## Minimizing MSE
+```{r, eval=TRUE}
+
+# This function minimizes the squared sum of errors.
+
+dif <- function(a = 1, b = 0, c = 0.6, d = 1, e = 1){
+  
+  ### 1. F1 POWER INDEX CALCULATION
+  F1PI_DF <- data.frame()
+  for (i in 1:n){
+    round <- i
+    for (j in 1:20){
+      driver <- Results_DF[j+(20*(round-1)), 1]
+      constructor <- driv_const[driv_const$driver_id == driver, 2] #corresponding constructor
+      status <- Results_DF[j+(20*(round-1)), 5]
+      driv_accum <- drivers_const_DF[drivers_const_DF$round == round & 
+                                       drivers_const_DF$driver == driver,]$accumulated_points
+      const_accum <- sum(drivers_const_DF[drivers_const_DF$round == round & 
+                                       drivers_const_DF$constructor == constructor,]$accumulated_points)
+      avail_accum <- sum(drivers_const_DF[drivers_const_DF$round == round,]$accumulated_points)
+      
+      # Power Index
+      PI <- ((driv_accum * a + const_accum * (1-a)) / (avail_accum * a + avail_accum * (1-a) * 2)) * 100
+      
+      # Adjusting for round 1, and vettel and de vries debut
+      if(round == 1 | driver == "vettel" & round == 3 | driver == "de_vries"){
+        if(status %in% finished){
+          PI_adj <- PI * b + 
+            (sum(last_results[last_results$constructor_id == constructor,]$points)/sum(last_results$points)) * 100 * (1-b)
+        } else{
+          PI_adj <- PI * c + 
+            (sum(last_results[last_results$constructor_id == constructor,]$points)/sum(last_results$points)) * 100 * (1-c)
+        }
+      } else if(status %in% finished){ # Averaging for last race
+           PI_adj <- PI * d + tail(F1PI_DF[F1PI_DF$driver == driver,]$PI_adj, n = 1) * (1-d)
+         } else{ # Adjusting for incidents
+        PI_adj <-  PI * e + tail(F1PI_DF[F1PI_DF$driver == driver,]$PI_adj, n = 1) * (1-e)
+      }
+      
+      PI_x <- data.frame(driver, constructor, status, PI, PI_adj, round)
+      F1PI_DF <- bind_rows(F1PI_DF, PI_x)
+    }
+  }
+
+  
+  # 2. PREDICTIVE FUNCTION
+  places_difference <- function(driver, round){ ### Round MUST be >= 2
+    grid <- as.integer(Results_DF[Results_DF$driver_id == driver & Results_DF$round == round,]$grid) #In the future, to make predictions, this argument MUST be given in the function
+    constructor <- driv_const[driv_const$driver_id == driver, 2] #corresponding constructor
+    team_mate <- driv_const[driv_const$constructor_id == constructor & 
+                              !(driv_const$driver_id %in% c(driver, "de_vries", "hulkenberg")), 1]
+    last_PI <- ifelse(is.nan(tail(F1PI_DF[F1PI_DF$driver == driver &
+                                              F1PI_DF$round %in% 1:(round-1),]$PI_adj, n = 1)), 0, 
+                        tail(F1PI_DF[F1PI_DF$driver == driver & F1PI_DF$round %in% 1:(round-1),]$PI_adj, n = 1))
+    accumulated_points_d <- sum(drivers_const_DF[drivers_const_DF$driver == driver &
+                                               drivers_const_DF$round %in% 1:(round-1),]$round_points)
+    accumulated_points_c <- sum(drivers_const_DF[drivers_const_DF$constructor == constructor 
+                                               & drivers_const_DF$round %in% 1:(round-1),]$round_points)
+    status <- Results_DF[Results_DF$driver_id == driver & Results_DF$round == round,]$status
+    actual_place <- ifelse(Results_DF[Results_DF$driver_id == driver & Results_DF$round == round,]$status %in% finished,
+                           Results_DF[Results_DF$driver_id == driver & Results_DF$round == round, 3], "DNF")
+    avg_tm_points <- ifelse(is.nan(mean(drivers_const_DF[drivers_const_DF$driver == team_mate & drivers_const_DF$round %in% 1:(round-1),]$round_points)), mean(drivers_const_DF[drivers_const_DF$constructor == constructor & drivers_const_DF$round %in% 1:(round-1),]$round_points) , mean(drivers_const_DF[drivers_const_DF$driver == team_mate & drivers_const_DF$round %in% 1:(round-1),]$round_points))
+    #average teammate's points, CETERIS PARIBUS we're assuming they will score the same in average. If there's a NaN, we'll consider the team avg points
+    
+    # Minimizing the change in PI
+    x <- c()
+    for(i in 1:20){
+      projected_points <- points[i]
+      projected_PI_single <- (((accumulated_points_d + projected_points) * a +
+        (accumulated_points_c + projected_points + avg_tm_points) * (1-a)) /
+          ((sum(points) * round * a) + (sum(points)* 2 * round * (1-a)))) * 100
+      projected_PI <- projected_PI_single * d + last_PI * (1-d)
+      diference <- abs(last_PI - projected_PI)
+      x <- rbind(x, diference)
+    }
+    
+    mean_grid <- ifelse(driver == "de_vries" | driver == "vettel" & round == 3, 0,
+                        median(as.integer(Results_DF[Results_DF$driver_id == driver &
+                                                     Results_DF$round %in% 1:(round-1),]$grid)))
+    sd_grid <- ifelse(round == 2 | is.na(sd((as.integer(Results_DF[Results_DF$driver_id == driver &
+                                                                 Results_DF$round %in% 1:(round-1),]$grid)))), 0,
+                      sd((as.integer(Results_DF[Results_DF$driver_id == driver &
+                                                                 Results_DF$round %in% 1:(round-1),]$grid))))
+    if(abs(grid - mean_grid) <= sd_grid){
+      places <- as.numeric(Results_DF[Results_DF$driver_id == driver & Results_DF$round %in% 1:(round-1), 4]) -
+        as.numeric(Results_DF[Results_DF$driver_id == driver & Results_DF$round %in% 1:(round-1), 3])
+      lambda_p <- ifelse(length(places[places >= 0]) == 0, 100, sum(places[places >= 0]) / length(places[places >= 0]))
+      lambda_n <- ifelse(length(places[places < 0]) == 0, -100, sum(places[places < 0]) / length(places[places < 0]))
+      
+      z <- c()
+      if (lambda_p != 100){
+        z[1:grid] <- 1-dpois(c((grid - 1):0), lambda_p)
+      } else {
+        z[1:grid] <- 1
+      }
+      
+      if (lambda_n != -100 & grid < 20){
+        z[(grid+1):20] <- 1-dpois(c(1:(20-grid)), abs(lambda_n))
+      } else if (grid < 20){
+        z[(grid+1):20] <- 1
+      }
+      
+      predicted <- which.min(x * (z^2))
+      } else{
+        predicted <- which.min(x)}
+    
+    return(predicted)
+  }
+  
+  
+  #MSE
+  xx <- c() #new vector
+  for (i in 61:nrow(Results_DF)){
+    driver_x <- Results_DF[i,]$driver_id #driver
+    round_x <- Results_DF[i,]$round #round
+    position <- as.integer(Results_DF[i,]$position) #real position
+    status <- Results_DF[i, 5] #status
+    
+    if(driver_x == "de_vries" | !(status %in% finished)){ #if not in status
+      xx[i-60] <- 0
+    } else{
+      xx[i-60] <- (places_difference(driver_x, round_x) - position)^2 #squarred difference
+      }
+    }
+  mse <- sum(xx)/length(xx) #MSE
+
+  return(mse)
+}
+
+##### 1- First grid
+min_parameters <- expand.grid("a" = seq(0, 1, by = 0.2), "b" = seq(0, 1, by = 0.2),
+                              "c" = seq(0, 1, by = 0.2), "d" = seq(0, 1, by = 0.2),
+                              "e" = seq(0, 1, by = 0.2))
+Error <- apply(min_parameters, 1, function(x) dif(a = x[1], b = x[2], c = x[3], d = x[4], e = x[5])) #Applying the function
+min_parameters[which.min(Error),] # Minimum parameters: (1, 0, 0.6, 1, 1), error = 7.8
+
+
+##### 2- Second grid
+min_parameters_2 <- expand.grid("a" = seq(0.8, 1, by = 0.05), "b" = seq(0, 0.7, by = 0.05),
+                              "c" = seq(0.5, 0.7, by = 0.05), "d" = seq(0.8, 1, by = 0.05),
+                              "e" = seq(0.8, 1, by = 0.05))
+Error_2 <- apply(min_parameters_2, 1, function(x) dif(a = x[1], b = x[2], c = x[3], d = x[4], e = x[5])) #Applying the function
+min_parameters_2[which.min(Error_2),] # Minimum parameters: (1, 0, 0.6, 1, 0.9), error = 7.757895
+
+
+
+##### 2- Third grid
+min_parameters_3 <- expand.grid("a" = seq(0.98, 1, by = 0.005), "b" = c(seq(0, 0.07, by = 0.01), seq(0.49, 0.61, by = 0.02)),
+                              "c" = seq(0.57, 0.62, by = 0.01), "d" = c(seq(0.78, 0.82, by = 0.01), seq(0.95, 1, by = 0.01)),
+                              "e" = seq(0.88, 0.92, by = 0.01))
+Error_3 <- apply(min_parameters_3, 1, function(x) dif(a = x[1], b = x[2], c = x[3], d = x[4], e = x[5])) #Applying the function
+min_parameters_3[which.min(Error_3),] # Minimum parameters: (0.99, 0.02, 0.58, 0.98, 0.9), error = 7.705263
+
+
+# Renaming parameters
+a = min_parameters_3[which.min(Error_3), 1]
+b = min_parameters_3[which.min(Error_3), 2]
+c = min_parameters_3[which.min(Error_3), 3]
+d = min_parameters_3[which.min(Error_3), 4]
+e = min_parameters_3[which.min(Error_3), 5]
+
+
+# Plot
+plot(Error, type ="l", lwd = 0.2, xaxt = "n", xlab = "Parameters combination", ylab = "MSE", main = "Combination of parameters that optimize the MSE", col= "springgreen3",xlim=c(0,7800))
+lines(1:length(Error), rep(7.705263, length(Error)), type = "l", lwd = 4, col = "orangered3", lty = 3)
+points(which.min(Error), min(Error_3), col = "dodgerblue4", pch = 4, lwd = 4, cex = 1.7)
+legend("topright", legend = c("Combinations","Minimum MSE","Optimum"), col = c("springgreen3","orangered3","dodgerblue4"),bty="n",cex=0.7,lwd = 2)
+
+```
+
+## Error rate (without accidents) - Exact values
+```{r, eval=TRUE}
+
+# Accuracy for exact places
+xx <- c()
+for (i in 21:nrow(Results_DF)){
+  driver_x <- Results_DF[i,]$driver_id
+  round_x <- Results_DF[i,]$round
+  position <- as.integer(Results_DF[i,]$position)
+  status <- Results_DF[i, 5]
+  diference <- abs(places_difference(driver_x, round_x) - position)
+  if(!(status %in% finished)){
+    xx[i-20] <- 10
+  } else if (diference != 0){
+    xx[i-20] <- 1
+  } else{
+    xx[i-20] <- 0
+  }
+}
+
+# Accuracy
+acc <- (length(xx[xx != 10]) - sum(xx[xx != 10])) / length(xx[xx != 10]) * 100
+
+cat("The accuracy for exact places is ", acc)  #Printing the result
+
+#14.70
+
+```
+
+## Error rate (without accidents) - +- 1 place
+```{r, eval=TRUE}
+
+# Accuracy for +- 1 place
+xx <- c()
+for (i in 21:nrow(Results_DF)){
+  driver_x <- Results_DF[i,]$driver_id
+  round_x <- Results_DF[i,]$round
+  position <- as.integer(Results_DF[i,]$position)
+  status <- Results_DF[i, 5]
+  diference <- abs(places_difference(driver_x, round_x) - position)
+  if(!(status %in% finished)){
+    xx[i-20] <- 10
+  } else if (diference > 1){
+    xx[i-20] <- 1
+  } else{
+    xx[i-20] <- 0
+  }
+}
+
+# Accuracy
+acc <- (length(xx[xx != 10]) - sum(xx[xx != 10])) / length(xx[xx != 10]) * 100
+
+cat("The accuracy for +- 1 place is ", acc)  #Printing the result
+
+# 43.80403
+
+```
+
+## Error rate (without accidents) - +- 2 places
+```{r, eval=TRUE}
+
+# Accuracy for +- 2 places
+xx <- c()
+for (i in 21:nrow(Results_DF)){
+  driver_x <- Results_DF[i,]$driver_id
+  round_x <- Results_DF[i,]$round
+  position <- as.integer(Results_DF[i,]$position)
+  status <- Results_DF[i, 5]
+  diference <- abs(places_difference(driver_x, round_x) - position)
+  if(!(status %in% finished)){
+    xx[i-20] <- 10
+  } else if (diference > 2){
+    xx[i-20] <- 1
+  } else{
+    xx[i-20] <- 0
+  }
+}
+
+# Accuracy
+acc <- (length(xx[xx != 10]) - sum(xx[xx != 10])) / length(xx[xx != 10]) * 100
+
+cat("The accuracy for +- 2 places is ", acc)  #Printing the result
+
+# 60.51873
+
+```
+
+## Error rate (without accidents) - +- 3 places
+```{r, eval=TRUE}
+
+# Accuracy for +- 3 places
+xx <- c()
+for (i in 21:nrow(Results_DF)){
+  driver_x <- Results_DF[i,]$driver_id
+  round_x <- Results_DF[i,]$round
+  position <- as.integer(Results_DF[i,]$position)
+  status <- Results_DF[i, 5]
+  diference <- abs(places_difference(driver_x, round_x) - position)
+  if(!(status %in% finished)){
+    xx[i-20] <- 10
+  } else if (diference > 3){
+    xx[i-20] <- 1
+  } else{
+    xx[i-20] <- 0
+  }
+}
+
+# Accuracy
+acc <- (length(xx[xx != 10]) - sum(xx[xx != 10])) / length(xx[xx != 10]) * 100
+
+cat("The accuracy for +- 3 places is", acc)  #Printing the result
+
+# 75.21614
+
+```
+## Error rate (without accidents) - 10 +- 3 places
+```{r, eval=TRUE}
+
+# Accuracy for +- 3 places
+xx <- c()
+for (i in 21:nrow(Results_DF)){
+  driver_x <- Results_DF[i,]$driver_id
+  round_x <- Results_DF[i,]$round
+  position <- as.integer(Results_DF[i,]$position)
+  status <- Results_DF[i, 5]
+  diference <- abs(places_difference(driver_x, round_x) - position)
+  if(!(status %in% finished)){
+    xx[i-20] <- 10
+  } else if (diference > 3  & position < 11){
+    xx[i-20] <- 1
+  } else{
+    xx[i-20] <- 0
+  }
+}
+
+# Accuracy
+acc <- (100 - sum(xx[xx != 10]))
+
+cat("The accuracy for the 10 first places +- 3 places is ", acc)  #Printing the result
+
+# 75.50432
+
+```
+
+
+
+## Proposed evaluation - NOT INCLUDED
+```{r, eval=TRUE}
+
+# Evaluation error
+xx <- c() #new vector
+for (i in 61:nrow(Results_DF)){
+  driver_x <- Results_DF[i,]$driver_id #driver
+  round_x <- Results_DF[i,]$round #round
+  position <- as.integer(Results_DF[i,]$position) #real position
+  status <- Results_DF[i, 5] #status
+  
+  if(driver_x == "de_vries" | !(status %in% finished)){ #if not in status
+    xx[i-60] <- 0
+  } else{
+    xx[i-60] <- abs(places_difference(driver_x, round_x) - position)/10
+    }
+  }
+err <- sum(xx)
+
+cat("The error of our new evaluation method is", err)  #Printing the result
+
+# 78.5
+
+```
