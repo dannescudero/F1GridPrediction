@@ -10,9 +10,10 @@ Project used for double-degree-link program between:
 - MSc Statistics Dissertation for University of Essex.
 - BSc Applied Mathematics for Instituto Tecnológico Autónomo de México (ITAM).
 
-Supervisors: Professor Abdellah Salhi (University of Essex) and Dr. Alfredo Garbuno Iñigo (ITAM).
+# Supervisors
+Professor Abdellah Salhi (University of Essex) and Dr. Alfredo Garbuno Iñigo (ITAM).
 
-Data:
-The data for this project comes from the R package, \texttt{f1dataR} created by Casanova. This R package gathers the data from the \texttt{Ergast Developer API} \citep{Ergast}, an experimental web service which provides a historical record of motor racing data, and the official Formula 1 data stream via the \texttt{fastf1} Python library.
+# Data
+<p The data for this project comes from the R package, <a ref="https://github.com/cran/f1dataR">f1dataR</a> created by Casanova. This R package gathers the data from the \texttt{Ergast Developer API} \citep{Ergast}, an experimental web service which provides a historical record of motor racing data, and the official Formula 1 data stream via the \texttt{fastf1} Python library.</p>
 
 Abstract:
