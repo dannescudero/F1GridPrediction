@@ -30,7 +30,7 @@ library(flexmix)
 ### F1 Power Index
 ########################
 
-y = 2022 #year
+y = 2023 #year
 n = nrow(load_schedule(y)) #session number
 
 driv_const <- as.data.frame(load_standings(y, n))[, -c(2,3,4)] #DF of drivers and constructors
@@ -97,8 +97,8 @@ for (i in 1:n){
     # Power Index
     PI <- ((driv_accum * a + const_accum * (1-a)) / (avail_accum * a + avail_accum * (1-a) * 2)) * 100
     
-    # Adjusting for round 1, and vettel and de vries debut
-    if(round == 1 | driver == "vettel" & round == 3 | driver == "de_vries"){
+    # Adjusting for round 1
+    if(round == 1){
       if(status %in% finished){
         PI_adj <- PI * b + 
           (sum(last_results[last_results$constructor_id == constructor,]$points)/sum(last_results$points)) * 100 * (1-b)
@@ -118,7 +118,10 @@ for (i in 1:n){
 }
 
 # Master DATASET
-View(cbind.data.frame(Results_DF[,c(1,2,7,4,3,5)], as.numeric(Results_DF[,4]) - as.numeric(Results_DF[,3]), drivers_const_DF[,c(3,4)], F1PI_DF[,c(4,5)]))
+
+assign(paste("masterDataSet", y, sep = ""), cbind.data.frame(Results_DF[,c(1,2,7,4,3,5)], as.numeric(Results_DF[,4]) - as.numeric(Results_DF[,3]), drivers_const_DF[,c(3,4)], F1PI_DF[,c(4,5)]))
+
+write.csv(paste("masterDataSet", y, sep = ""), paste("DataSet", y, ".csv", sep = ""), row.names = FALSE)
 
 ```
 
@@ -155,7 +158,7 @@ places_difference <- function(driver, round){ ### Round MUST be >= 2
     x <- rbind(x, diference)
   }
   
-  mean_grid <- ifelse(driver == "de_vries" | driver == "vettel" & round == 3, 0,
+  mean_grid <- ifelse(driver == "vettel" & round == 3, 0,
                       median(as.integer(Results_DF[Results_DF$driver_id == driver &
                                                    Results_DF$round %in% 1:(round-1),]$grid)))
   sd_grid <- ifelse(round == 2 | is.na(sd((as.integer(Results_DF[Results_DF$driver_id == driver &
@@ -291,16 +294,16 @@ predict_grid(10)
 
 # MSE
 xx <- c() #new vector
-for (i in 61:nrow(Results_DF)){
+for (i in 21:nrow(Results_DF)){
   driver_x <- Results_DF[i,]$driver_id #driver
   round_x <- Results_DF[i,]$round #round
   position <- as.integer(Results_DF[i,]$position) #real position
   status <- Results_DF[i, 5] #status
   
   if(driver_x == "de_vries" | !(status %in% finished)){ #if not in status
-    xx[i-60] <- 0
+    xx[i-20] <- 0
   } else{
-    xx[i-60] <- (places_difference(driver_x, round_x) - position)^2 #squarred difference
+    xx[i-20] <- (places_difference(driver_x, round_x) - position)^2 #squarred difference
     }
   }
 mse <- sum(xx)/length(xx) #MSE
@@ -513,10 +516,10 @@ e = min_parameters_3[which.min(Error_3), 5]
 
 
 # Plot
-plot(Error, type ="l", lwd = 0.2, xaxt = "n", xlab = "Parameters combination", ylab = "MSE", main = "Combination of Parameters that Optimize the MSE", col= "springgreen3",xlim=c(0,7800))
+plot(Error, type ="l", lwd = 0.2, xaxt = "n", xlab = "Parameters combination", ylab = "MSE", main = "Combination of parameters that optimize the MSE", col= "springgreen3",xlim=c(0,7800))
 lines(1:length(Error), rep(7.705263, length(Error)), type = "l", lwd = 4, col = "orangered3", lty = 3)
 points(which.min(Error), min(Error_3), col = "dodgerblue4", pch = 4, lwd = 4, cex = 1.7)
-legend("topright", legend = c("Combinations","Minimum MSE","Optimum"), col = c("springgreen3","orangered3","dodgerblue4"),bty="n",cex=0.9,lwd = 3,lty=c(1,2,0),pch = c(-1, -1, 4))
+legend("topright", legend = c("Combinations","Minimum MSE","Optimum"), col = c("springgreen3","orangered3","dodgerblue4"),bty="n",cex=0.7,lwd = 2)
 
 ```
 
@@ -531,7 +534,7 @@ for (i in 21:nrow(Results_DF)){
   position <- as.integer(Results_DF[i,]$position)
   status <- Results_DF[i, 5]
   diference <- abs(places_difference(driver_x, round_x) - position)
-  if(!(status %in% finished) || driver_x == "de_vries"){
+  if(!(status %in% finished)){
     xx[i-20] <- 10
   } else if (diference != 0){
     xx[i-20] <- 1
@@ -560,7 +563,7 @@ for (i in 21:nrow(Results_DF)){
   position <- as.integer(Results_DF[i,]$position)
   status <- Results_DF[i, 5]
   diference <- abs(places_difference(driver_x, round_x) - position)
-  if(!(status %in% finished) || driver_x == "de_vries"){
+  if(!(status %in% finished)){
     xx[i-20] <- 10
   } else if (diference > 1){
     xx[i-20] <- 1
@@ -589,7 +592,7 @@ for (i in 21:nrow(Results_DF)){
   position <- as.integer(Results_DF[i,]$position)
   status <- Results_DF[i, 5]
   diference <- abs(places_difference(driver_x, round_x) - position)
-  if(!(status %in% finished) || driver_x == "de_vries"){
+  if(!(status %in% finished)){
     xx[i-20] <- 10
   } else if (diference > 2){
     xx[i-20] <- 1
@@ -618,7 +621,7 @@ for (i in 21:nrow(Results_DF)){
   position <- as.integer(Results_DF[i,]$position)
   status <- Results_DF[i, 5]
   diference <- abs(places_difference(driver_x, round_x) - position)
-  if(!(status %in% finished) || driver_x == "de_vries"){
+  if(!(status %in% finished)){
     xx[i-20] <- 10
   } else if (diference > 3){
     xx[i-20] <- 1
@@ -646,7 +649,7 @@ for (i in 21:nrow(Results_DF)){
   position <- as.integer(Results_DF[i,]$position)
   status <- Results_DF[i, 5]
   diference <- abs(places_difference(driver_x, round_x) - position)
-  if(!(status %in% finished) || driver_x == "de_vries"){
+  if(!(status %in% finished)){
     xx[i-20] <- 10
   } else if (diference > 3  & position < 11){
     xx[i-20] <- 1
@@ -656,7 +659,7 @@ for (i in 21:nrow(Results_DF)){
 }
 
 # Accuracy
-acc <- (210 - sum(xx[xx != 10])) / 210 * 100
+acc <- (100 - sum(xx[xx != 10]))
 
 cat("The accuracy for the 10 first places +- 3 places is ", acc)  #Printing the result
 
