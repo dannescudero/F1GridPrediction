@@ -21,5 +21,5 @@ This study introduces a novel non-parametric model for predicting Formula 1 race
 
 ## List or Components
 - <em> DataSet2018.csv <em> Component A
-- [ ] Component B
+- <mark> Component B <mark>
 - [ ] Component C
