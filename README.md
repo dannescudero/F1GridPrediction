@@ -20,6 +20,16 @@ The data for this project comes from the `R` package, <a href="https://github.co
 This study introduces a novel non-parametric model for predicting Formula 1 race outcomes, utilizing an adapted Elo rating system to estimate driver strengths. The model addresses the challenges posed by F1's complex multi-class outcomes and the absence of historical car update data. It outperforms alternative methods, including machine learning and neural networks, highlighting its adaptability for other sports and its potential to support the growing trend of F1 betting and analysis driven by a expanding fan base.
 
 ## List or Components
-- `DataSet2018.csv` Component A
-- <mark> Component B <mark>
-- [ ] Component C
+- `F1 I.Rmd` R markdown code with all functions
+- `DataSetY.csv` Data Set of year Y with column values:
+    - <em> driver_id <em> drivers from the Y season;
+    - <em> constructor_id <em> constructor associated to the driver;
+    - <em> round <em> different races in the respective season, usually there are 22;
+    - <em> grid <em> is a value from 1 to 20 that states the position on which the driver starts the race;
+    - <em> position <em> is the number indicates the result of the race, ranging from 1 to 20;
+    - <em> status <em> explains the condition on which the drivers finalized the race. The focus is around two main concerns: for finished drivers or if an incident was presented;
+    - <em> pos_gained <em> refers to the variable computed as position - grid. The value ranges from -19 to 19 and states the final number of places the driver gained/lost;
+    - <em> round_points <em> the points awarded according to the race result (different from the original FIA ones);
+    - <em> accum_points <em> is the accumulated value of awarded points up to the ith race;
+    - <em> PI <em> is the Power Index which describes th epercentage of available points;
+    - <em> PI_adj <em> is the Adjusted Power Index associated to the previous PI
