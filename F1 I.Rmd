@@ -30,7 +30,7 @@ library(flexmix)
 ### F1 Power Index
 ########################
 
-y = 2023 #year
+y = 2022 #year
 n = nrow(load_schedule(y)) #session number
 
 driv_const <- as.data.frame(load_standings(y, n))[, -c(2,3,4)] #DF of drivers and constructors
@@ -48,6 +48,7 @@ axis(1, 1:20, lwd = 3, col = "orangered3")
 mtext(c("Comparison between FIA awarded points and new computed Points"), side = 3, line = -1, outer = TRUE, font = 2, cex = 1.3)
 
 # Results
+Results_DF <- data.frame()
 assign(paste("Results_DF", y, sep = "_"), data.frame())
 Results_DF <- get(paste("Results_DF", y, sep = "_"))
 for(k in 1:n){ #Sessions
@@ -97,8 +98,8 @@ for (i in 1:n){
     # Power Index
     PI <- ((driv_accum * a + const_accum * (1-a)) / (avail_accum * a + avail_accum * (1-a) * 2)) * 100
     
-    # Adjusting for round 1
-    if(round == 1){
+    # Adjusting for round 1, and vettel and de vries debut
+    if(round == 1 | driver == "vettel" & round == 3 | driver == "de_vries"){ #| driver == "vettel" & round == 3 ##ADJUSTMENT FOR DRIVERS THAT DID NOT RACED COMPLETE SEASON (driver + first participation race)
       if(status %in% finished){
         PI_adj <- PI * b + 
           (sum(last_results[last_results$constructor_id == constructor,]$points)/sum(last_results$points)) * 100 * (1-b)
@@ -118,10 +119,11 @@ for (i in 1:n){
 }
 
 # Master DATASET
-
 assign(paste("masterDataSet", y, sep = ""), cbind.data.frame(Results_DF[,c(1,2,7,4,3,5)], as.numeric(Results_DF[,4]) - as.numeric(Results_DF[,3]), drivers_const_DF[,c(3,4)], F1PI_DF[,c(4,5)]))
+#colnames(masterDataSet2019)[7] <- "pos_gained" #changing name of column
 
-write.csv(paste("masterDataSet", y, sep = ""), paste("DataSet", y, ".csv", sep = ""), row.names = FALSE)
+write.csv(get(paste("masterDataSet", y, sep = "")), paste("DataSet", y, ".csv", sep = ""), row.names = FALSE) #CSV file
+
 
 ```
 
