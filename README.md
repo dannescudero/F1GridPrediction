@@ -18,3 +18,8 @@ The data for this project comes from the R package, <a href="https://github.com/
 ## Abstract
 
 This study introduces a novel non-parametric model for predicting Formula 1 race outcomes, utilizing an adapted Elo rating system to estimate driver strengths. The model addresses the challenges posed by F1's complex multi-class outcomes and the absence of historical car update data. It outperforms alternative methods, including machine learning and neural networks, highlighting its adaptability for other sports and its potential to support the growing trend of F1 betting and analysis driven by a expanding fan base.
+
+## List or Components
+- [ DataSet2018.csv ] Component A
+- [ ] Component B
+- [ ] Component C
