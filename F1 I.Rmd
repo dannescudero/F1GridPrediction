@@ -528,9 +528,9 @@ dif <- function(a = 1, b = 0, c = 0.6, d = 1, e = 1){
 }
 
 ##### 1- First grid
-min_parameters <- expand.grid("a" = seq(0, 1, by = 0.2), "b" = seq(0, 1, by = 0.2),
-                              "c" = seq(0, 1, by = 0.2), "d" = seq(0, 1, by = 0.2),
-                              "e" = seq(0, 1, by = 0.2))
+min_parameters <- expand.grid("a" = seq(0, 1, by = 0.25), "b" = seq(0, 1, by = 0.25),
+                              "c" = seq(0, 1, by = 0.25), "d" = seq(0, 1, by = 0.25),
+                              "e" = seq(0, 1, by = 0.25))
 Error <- apply(min_parameters, 1, function(x) dif(a = x[1], b = x[2], c = x[3], d = x[4], e = x[5])) #Applying the function
 min_parameters[which.min(Error),] # Minimum parameters: (1, 0, 0.6, 1, 1), error = 7.8
 
