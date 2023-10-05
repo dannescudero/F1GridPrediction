@@ -75,11 +75,11 @@ for (i in 1:n){
 }
 
 # Results from the parameter tuning
-a = 1 #gamma
-b = 0.02 #zeta
-c = 0.58 #eta
-d = 0.98 #theta
-e = 0.9 #nu
+a = 0.9825 #gamma
+b = 0.5 #zeta
+c = 0.5 #eta
+d = 0.985 #theta
+e = 1 #nu
 
 # F1 Power Index for the race
 F1PI_DF <- data.frame()
@@ -99,7 +99,7 @@ for (i in 1:n){
     PI <- ((driv_accum * a + const_accum * (1-a)) / (avail_accum * a + avail_accum * (1-a) * 2)) * 100
     
     # Adjusting for round 1, and vettel and de vries debut
-    if(round == 1 | driver == "kubica" & round == 13){ #| driver == "vettel" & round == 3 ##ADJUSTMENT FOR DRIVERS THAT DID NOT RACED COMPLETE SEASON (driver + first participation race) #driver == "vettel" & round == 3 | driver == "de_vries"
+    if(round == 1 | driver == "vettel" & round == 3 | driver == "de_vries"){ #| driver == "vettel" & round == 3 ##ADJUSTMENT FOR DRIVERS THAT DID NOT RACED COMPLETE SEASON (driver + first participation race)
       if(status %in% finished){
         PI_adj <- PI * b + 
           (sum(last_results[last_results$constructor_id == constructor,]$points)/sum(last_results$points)) * 100 * (1-b)
@@ -120,12 +120,29 @@ for (i in 1:n){
 
 # Master DATASET
 assign(paste("masterDataSet", y, sep = ""), cbind.data.frame(Results_DF[,c(1,2,7,4,3,5)], as.numeric(Results_DF[,4]) - as.numeric(Results_DF[,3]), drivers_const_DF[,c(3,4)], F1PI_DF[,c(4,5)]))
-#colnames(masterDataSet2019)[7] <- "pos_gained" #changing name of column
-
+#colnames(masterDataSet2022)[7] <- "pos_gained" #changing name of column
 write.csv(get(paste("masterDataSet", y, sep = "")), paste("DataSet", y, ".csv", sep = ""), row.names = FALSE) #CSV file
 
 
+# Plot of constant PI
+{par(mfrow=c(2,3), mar=c(4,4,6,1))
+plot(masterDataSet2022[masterDataSet2022$driver_id == "perez",11], type='l', xlab = "Races of 2022", ylab = "Power Index", col = "springgreen3", lwd = 3, main="Sergio Perez", cex.lab = 1.25, cex.main = 1.5)
+abline(v=7, col = "orangered3", lwd = 2)
+plot(masterDataSet2022[masterDataSet2022$driver_id == "hamilton",11], type='l', xlab = "Races of 2022", ylab = "Power Index", col = "springgreen3", lwd = 3,main="Lewis Hamilton", cex.lab = 1.25, cex.main = 1.5)
+abline(v=7, col = "orangered3", lwd = 2)
+plot(masterDataSet2022[masterDataSet2022$driver_id == "leclerc",11], type='l', xlab = "Races of 2022", ylab = "Power Index", col = "springgreen3", lwd = 3,main="Charles Leclerc", cex.lab = 1.25, cex.main = 1.5)
+abline(v=7, col = "orangered3", lwd = 2)
+plot(masterDataSet2022[masterDataSet2022$driver_id == "max_verstappen",11], type='l', xlab = "Races of 2022", ylab = "Power Index", col = "springgreen3", lwd = 3,main="Max Verstappen", cex.lab = 1.25, cex.main = 1.5)
+abline(v=7, col = "orangered3", lwd = 2)
+plot(masterDataSet2022[masterDataSet2022$driver_id == "tsunoda",11], type='l', xlab = "Races of 2022", ylab = "Power Index", col = "springgreen3", lwd = 3,main="Yuki Tsunoda", cex.lab = 1.25, cex.main = 1.5)
+abline(v=7, col = "orangered3", lwd = 2)
+plot(masterDataSet2022[masterDataSet2022$driver_id == "norris",11], type='l', xlab = "Races of 2022", ylab = "Power Index", col = "springgreen3", lwd = 3,main="Lando Norris", cex.lab = 1.25, cex.main = 1.5)
+abline(v=7, col = "orangered3", lwd = 2)}
+#legend("topright", legend = "FIA points", lwd = 3, col = "springgreen3", bty="n",cex = 0.8)
+mtext(c("Consistency in PI"), side = 3, line = -2, outer = TRUE, font = 2, cex = 1.2)
+
 ```
+
 
 ## Method -- FUNCTION
 ```{r, eval=TRUE}
@@ -160,7 +177,7 @@ places_difference <- function(driver, round){ ### Round MUST be >= 2
     x <- rbind(x, diference)
   }
   
-  mean_grid <- ifelse(driver == "vettel" & round == 3, 0,
+  mean_grid <- ifelse(driver == "vettel" & round == 3 | driver == "de_vries", 0,
                       median(as.integer(Results_DF[Results_DF$driver_id == driver &
                                                    Results_DF$round %in% 1:(round-1),]$grid)))
   sd_grid <- ifelse(round == 2 | is.na(sd((as.integer(Results_DF[Results_DF$driver_id == driver &
@@ -528,41 +545,41 @@ dif <- function(a = 1, b = 0, c = 0.6, d = 1, e = 1){
 }
 
 ##### 1- First grid
-min_parameters <- expand.grid("a" = seq(0, 1, by = 0.25), "b" = seq(0, 1, by = 0.25),
-                              "c" = seq(0, 1, by = 0.25), "d" = seq(0, 1, by = 0.25),
+min_parameters <- expand.grid("a" = seq(0, 1, by = 0.25), "b" = seq(0, 1, by = 0.2),
+                              "c" = seq(0, 1, by = 0.2), "d" = seq(0, 1, by = 0.25),
                               "e" = seq(0, 1, by = 0.25))
 Error <- apply(min_parameters, 1, function(x) dif(a = x[1], b = x[2], c = x[3], d = x[4], e = x[5])) #Applying the function
-min_parameters[which.min(Error),] # Minimum parameters: (1, 0, 0.6, 1, 1), error = 7.8
+min_parameters[which.min(Error),] # Minimum parameters: (1, 0, 0, 1, 1), error = 10.95
 
 
 ##### 2- Second grid
-min_parameters_2 <- expand.grid("a" = seq(0.8, 1, by = 0.05), "b" = seq(0, 0.7, by = 0.05),
-                              "c" = seq(0.5, 0.7, by = 0.05), "d" = seq(0.8, 1, by = 0.05),
-                              "e" = seq(0.8, 1, by = 0.05))
+min_parameters_2 <- expand.grid("a" = seq(0.85, 1, by = 0.05), "b" = seq(0, 1, by = 0.1),
+                              "c" = seq(0, 1, by = 0.1), "d" = seq(0.85, 1, by = 0.05),
+                              "e" = seq(0.85, 1, by = 0.05))
 Error_2 <- apply(min_parameters_2, 1, function(x) dif(a = x[1], b = x[2], c = x[3], d = x[4], e = x[5])) #Applying the function
-min_parameters_2[which.min(Error_2),] # Minimum parameters: (1, 0, 0.6, 1, 0.9), error = 7.757895
+min_parameters_2[which.min(Error_2),] # Minimum parameters: (1, 0, 0, 1, 1), error = 10.95
 
 
 
 ##### 2- Third grid
-min_parameters_3 <- expand.grid("a" = seq(0.98, 1, by = 0.005), "b" = c(seq(0, 0.07, by = 0.01), seq(0.49, 0.61, by = 0.02)),
-                              "c" = seq(0.57, 0.62, by = 0.01), "d" = c(seq(0.78, 0.82, by = 0.01), seq(0.95, 1, by = 0.01)),
-                              "e" = seq(0.88, 0.92, by = 0.01))
+min_parameters_3 <- expand.grid("a" = seq(0.98, 1, by = 0.005), "b" = seq(0, 1, by = 0.1),
+                              "c" = seq(0, 1, by = 0.1), "d" = seq(0.98, 1, by = 0.005),
+                              "e" = seq(0.98, 1, by = 0.005))
 Error_3 <- apply(min_parameters_3, 1, function(x) dif(a = x[1], b = x[2], c = x[3], d = x[4], e = x[5])) #Applying the function
-min_parameters_3[which.min(Error_3),] # Minimum parameters: (0.99, 0.02, 0.58, 0.98, 0.9), error = 7.705263
+min_parameters_3[which.min(Error_3),] # Minimum parameters: (0.9825, 0.02, 0.58, 0.985, 1), error = 7.705263
 
 
 # Renaming parameters
-a = min_parameters_3[which.min(Error_3), 1]
-b = min_parameters_3[which.min(Error_3), 2]
-c = min_parameters_3[which.min(Error_3), 3]
-d = min_parameters_3[which.min(Error_3), 4]
-e = min_parameters_3[which.min(Error_3), 5]
+a = mean(min_parameters_3[Error_3 == min(Error_3), 1])
+b = mean(min_parameters_3[Error_3 == min(Error_3), 2])
+c = mean(min_parameters_3[Error_3 == min(Error_3), 3])
+d = mean(min_parameters_3[Error_3 == min(Error_3), 4])
+e = mean(min_parameters_3[Error_3 == min(Error_3), 5])
 
 
 # Plot
-plot(Error, type ="l", lwd = 0.2, xaxt = "n", xlab = "Parameters combination", ylab = "MSE", main = "Combination of parameters that optimize the MSE", col= "springgreen3",xlim=c(0,7800))
-lines(1:length(Error), rep(7.705263, length(Error)), type = "l", lwd = 4, col = "orangered3", lty = 3)
+plot(Error, type ="l", lwd = 0.2, xaxt = "n", xlab = "Parameters combination", ylab = "MSE", main = "Combination of parameters that optimize the MSE", col= "springgreen3",xlim=c(0,4600))
+lines(1:length(Error), rep(10.83947, length(Error)), type = "l", lwd = 4, col = "orangered3", lty = 3)
 points(which.min(Error), min(Error_3), col = "dodgerblue4", pch = 4, lwd = 4, cex = 1.7)
 legend("topright", legend = c("Combinations","Minimum MSE","Optimum"), col = c("springgreen3","orangered3","dodgerblue4"),bty="n",cex=0.7,lwd = 2)
 
@@ -579,7 +596,7 @@ for (i in 21:nrow(Results_DF)){
   position <- as.integer(Results_DF[i,]$position)
   status <- Results_DF[i, 5]
   diference <- abs(places_difference(driver_x, round_x) - position)
-  if(!(status %in% finished)){
+  if(!(status %in% finished) || driver_x == "de_vries"){
     xx[i-20] <- 10
   } else if (diference != 0){
     xx[i-20] <- 1
@@ -593,7 +610,7 @@ acc <- (length(xx[xx != 10]) - sum(xx[xx != 10])) / length(xx[xx != 10]) * 100
 
 cat("The accuracy for exact places is ", acc)  #Printing the result
 
-#14.70
+#13.83
 
 ```
 
@@ -608,7 +625,7 @@ for (i in 21:nrow(Results_DF)){
   position <- as.integer(Results_DF[i,]$position)
   status <- Results_DF[i, 5]
   diference <- abs(places_difference(driver_x, round_x) - position)
-  if(!(status %in% finished)){
+  if(!(status %in% finished) || driver_x == "de_vries"){
     xx[i-20] <- 10
   } else if (diference > 1){
     xx[i-20] <- 1
@@ -622,7 +639,7 @@ acc <- (length(xx[xx != 10]) - sum(xx[xx != 10])) / length(xx[xx != 10]) * 100
 
 cat("The accuracy for +- 1 place is ", acc)  #Printing the result
 
-# 43.80403
+# 43.23
 
 ```
 
@@ -637,7 +654,7 @@ for (i in 21:nrow(Results_DF)){
   position <- as.integer(Results_DF[i,]$position)
   status <- Results_DF[i, 5]
   diference <- abs(places_difference(driver_x, round_x) - position)
-  if(!(status %in% finished)){
+  if(!(status %in% finished) || driver_x == "de_vries"){
     xx[i-20] <- 10
   } else if (diference > 2){
     xx[i-20] <- 1
@@ -651,7 +668,7 @@ acc <- (length(xx[xx != 10]) - sum(xx[xx != 10])) / length(xx[xx != 10]) * 100
 
 cat("The accuracy for +- 2 places is ", acc)  #Printing the result
 
-# 60.51873
+# 61.67
 
 ```
 
@@ -666,7 +683,7 @@ for (i in 21:nrow(Results_DF)){
   position <- as.integer(Results_DF[i,]$position)
   status <- Results_DF[i, 5]
   diference <- abs(places_difference(driver_x, round_x) - position)
-  if(!(status %in% finished)){
+  if(!(status %in% finished) || driver_x == "de_vries"){
     xx[i-20] <- 10
   } else if (diference > 3){
     xx[i-20] <- 1
@@ -680,7 +697,7 @@ acc <- (length(xx[xx != 10]) - sum(xx[xx != 10])) / length(xx[xx != 10]) * 100
 
 cat("The accuracy for +- 3 places is", acc)  #Printing the result
 
-# 75.21614
+# 75.50
 
 ```
 ## Error rate (without accidents) - 10 +- 3 places
@@ -694,7 +711,7 @@ for (i in 21:nrow(Results_DF)){
   position <- as.integer(Results_DF[i,]$position)
   status <- Results_DF[i, 5]
   diference <- abs(places_difference(driver_x, round_x) - position)
-  if(!(status %in% finished)){
+  if(!(status %in% finished) || driver_x == "de_vries"){
     xx[i-20] <- 10
   } else if (diference > 3  & position < 11){
     xx[i-20] <- 1
@@ -704,37 +721,10 @@ for (i in 21:nrow(Results_DF)){
 }
 
 # Accuracy
-acc <- (100 - sum(xx[xx != 10]))
+acc <- (210 - sum(xx[xx != 10]))  / 210 * 100
 
 cat("The accuracy for the 10 first places +- 3 places is ", acc)  #Printing the result
 
-# 75.50432
-
-```
-
-
-
-## Proposed evaluation - NOT INCLUDED
-```{r, eval=TRUE}
-
-# Evaluation error
-xx <- c() #new vector
-for (i in 61:nrow(Results_DF)){
-  driver_x <- Results_DF[i,]$driver_id #driver
-  round_x <- Results_DF[i,]$round #round
-  position <- as.integer(Results_DF[i,]$position) #real position
-  status <- Results_DF[i, 5] #status
-  
-  if(driver_x == "de_vries" | !(status %in% finished)){ #if not in status
-    xx[i-60] <- 0
-  } else{
-    xx[i-60] <- abs(places_difference(driver_x, round_x) - position)/10
-    }
-  }
-err <- sum(xx)
-
-cat("The error of our new evaluation method is", err)  #Printing the result
-
-# 78.5
+# 80.47
 
 ```
